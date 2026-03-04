@@ -1,0 +1,19 @@
+# CODEOWNERS — Build-To-learn-Lamarca
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ── Global fallback ────────────────────────────────────────────────────────────
+*   @Build-To-learn-Lamarca/team-leads
+
+# ── Backend ────────────────────────────────────────────────────────────────────
+backend/   @Build-To-learn-Lamarca/backend-team
+
+# ── CI/CD e infraestrutura ─────────────────────────────────────────────────────
+.github/             @Build-To-learn-Lamarca/devops-team
+
+# ── Dependências ───────────────────────────────────────────────────────────────
+backend/requirements*.txt   @Build-To-learn-Lamarca/backend-team @Build-To-learn-Lamarca/security-team
+pyproject.toml              @Build-To-learn-Lamarca/backend-team
+
+# ── Configuração de segurança ──────────────────────────────────────────────────
+.pre-commit-config.yaml   @Build-To-learn-Lamarca/devops-team @Build-To-learn-Lamarca/security-team

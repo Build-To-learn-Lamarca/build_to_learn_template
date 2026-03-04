@@ -1,0 +1,70 @@
+# Pre-commit hooks for the api-container template.
+#
+# Execution order matters:
+#   1. General hygiene (trailing whitespace, file endings, yaml/toml check)
+#   2. Black — formats Python code first
+#   3. isort — sorts imports in Black-compatible mode
+#   4. Ruff — lints after formatting (won't fight Black/isort)
+#   5. mypy  — type-checks last (needs formatted + linted code)
+#
+# All Python hooks are scoped to `backend/` via the `files` key so they
+# never run on unrelated files and don't conflict with each other.
+#
+# To install:  pre-commit install
+# To run all:  pre-commit run --all-files
+
+default_language_version:
+  python: python3.11
+
+repos:
+  # ── General file hygiene ──────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: debug-statements
+        files: ^backend/
+
+  # ── Black — Python formatter (runs first, before linters) ────────────────
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        language_version: python3.11
+        files: ^backend/
+        args: ["--config", "pyproject.toml"]
+
+  # ── isort — import sorter (must run after Black config is set) ────────────
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        files: ^backend/
+        args: ["--settings-path", "pyproject.toml"]
+
+  # ── Ruff — fast linter (formatting rules disabled; runs after Black) ──────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.6
+    hooks:
+      - id: ruff
+        files: ^backend/
+        args: ["--config", "pyproject.toml", "--fix"]
+
+  # ── mypy — static type checker (runs last) ────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.1
+    hooks:
+      - id: mypy
+        files: ^backend/app/
+        args: ["--config-file", "pyproject.toml"]
+        additional_dependencies:
+          - flask>=3.0
+          - types-Flask

@@ -1,0 +1,159 @@
+name: Build, Scan & Publish
+
+# Triggered only after a PR is merged into main.
+# Flow: construct Dockerfile → build image → Trivy vulnerability scan → push to Docker Hub.
+# The push is BLOCKED if Trivy finds CRITICAL or HIGH vulnerabilities.
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+
+permissions:
+  contents: read
+  security-events: write   # upload Trivy SARIF to GitHub Code Scanning
+
+# ──────────────────────────────────────────────────────────────────────────────
+jobs:
+  build-scan-push:
+    name: Construct → Build → Trivy Scan → Push Docker Hub
+    runs-on: ubuntu-latest
+
+    # Image name follows the repository name automatically so that when a
+    # new repo is created from this template (e.g. "my-org/auth-api") the
+    # image is published as "DOCKERHUB_USERNAME/auth-api".
+    env:
+      IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Construct Dockerfile and .dockerignore ────────────────────────────
+      # The project contains only application code. The Dockerfile and all
+      # Docker infrastructure are constructed here by CI/CD so the developer
+      # never needs Docker-specific files in the repository.
+      # To customise the image (base, ports, workers), edit this step.
+      - name: Construct Docker context
+        run: |
+          cat > Dockerfile << 'DOCKERFILE'
+          # ── Stage 1: builder ────────────────────────────────────────────────
+          FROM python:3.11-slim AS builder
+          WORKDIR /build
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              gcc \
+              && rm -rf /var/lib/apt/lists/*
+          COPY backend/requirements.txt .
+          RUN python -m venv /opt/venv \
+              && /opt/venv/bin/pip install --upgrade pip \
+              && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+          # ── Stage 2: runtime ─────────────────────────────────────────────
+          FROM python:3.11-slim AS runtime
+          LABEL org.opencontainers.image.title="${{ github.event.repository.name }}" \
+                org.opencontainers.image.revision="${{ github.sha }}" \
+                org.opencontainers.image.source="https://github.com/${{ github.repository }}"
+          COPY --from=builder /opt/venv /opt/venv
+          ENV PATH="/opt/venv/bin:$PATH"
+          WORKDIR /app
+          COPY backend/app ./app
+          RUN groupadd --gid 1001 appgroup \
+              && useradd --uid 1001 --gid appgroup --no-create-home appuser \
+              && chown -R appuser:appgroup /app
+          USER appuser
+          EXPOSE 5000
+          CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "30", "app.main:app"]
+          DOCKERFILE
+
+          cat > .dockerignore << 'DOCKERIGNORE'
+          .git
+          .gitignore
+          __pycache__
+          *.pyc
+          *.pyo
+          .mypy_cache
+          .ruff_cache
+          .venv
+          venv
+          .env
+          *.env
+          backend/tests/
+          backend/requirements-dev.txt
+          .github/
+          *.md
+          .pre-commit-config.yaml
+          .cursor/
+          .vscode/
+          DOCKERIGNORE
+
+      # ── Docker Buildx ─────────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Build (do NOT push yet — Trivy must scan first) ───────────────────
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Trivy — vulnerability scan ─────────────────────────────────────────
+      - name: Trivy — scan image (SARIF upload)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:latest
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image
+
+      - name: Trivy — fail on CRITICAL/HIGH (blocking gate before push)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:latest
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      # ── Login & Push (only if Trivy passes) ───────────────────────────────
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push image to Docker Hub
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Image published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Registry: https://hub.docker.com/r/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Tags: \`latest\`, \`sha-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
