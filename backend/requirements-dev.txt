@@ -5,7 +5,7 @@ pytest==8.3.2
 pytest-cov==5.0.0
 
 # Linting / formatting (same versions as pre-commit hooks)
-black==24.4.2
+black==26.1.0
 isort==5.13.2
 ruff==0.5.6
 mypy==1.11.1
