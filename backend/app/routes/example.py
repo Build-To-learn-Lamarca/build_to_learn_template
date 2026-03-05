@@ -14,13 +14,13 @@ example_bp = Blueprint("example", __name__)
 _items: list[dict[str, object]] = []
 
 
-@example_bp.get("/items")
+@example_bp.route("/items", methods=["GET"])
 def list_items() -> tuple[Response, int]:
     """Return all items."""
     return jsonify(_items), 200
 
 
-@example_bp.post("/items")
+@example_bp.route("/items", methods=["POST"])
 def create_item() -> tuple[Response, int]:
     """Create a new item.
 
