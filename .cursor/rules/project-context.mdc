@@ -1,0 +1,216 @@
+---
+description: Contexto completo do projeto — arquitetura, stack, variáveis, estrutura, serviços, hurdles, patterns, pipeline e checklist. Preencha todas as seções antes de começar o desenvolvimento.
+globs: ["*"]
+alwaysApply: true
+---
+
+# Contexto do Projeto — [NOME DO SERVIÇO]
+
+> Arquivo de contexto do agente. Mantenha atualizado a cada mudança relevante.
+> Baseado no template `build_to_learn_template` — Build-To-learn-Lamarca.
+
+---
+
+## 1. Visão geral da arquitetura
+
+- **Objetivo:** [O que este serviço faz? Qual problema resolve?]
+- **Tipo:** API REST / Worker / Gateway / outro
+- **Repositório:** `https://github.com/Build-To-learn-Lamarca/[nome-do-repo]`
+- **Dependências externas:** [Outros serviços que este consome ou que consomem este]
+- **Porta padrão:** [ex: 5000]
+
+```
+[Diagrama ASCII ou mermaid da arquitetura interna, se aplicável]
+
+Exemplo:
+  Client → [este serviço] → Database
+                          → [outro serviço]
+```
+
+---
+
+## 2. Stack tecnológico completo
+
+| Camada | Tecnologia | Versão |
+|---|---|---|
+| Runtime | Python | 3.11 |
+| Framework | Flask | 3.0.x |
+| Servidor WSGI | Gunicorn | 22.x |
+| Testes | pytest + pytest-cov | 8.x |
+| Linter | Ruff | 0.5.x |
+| Formatter | Black | 24.x |
+| Import sorter | isort | 5.x |
+| Type checker | mypy | 1.x |
+| Pre-commit | pre-commit | — |
+| Container | Docker (multi-stage, non-root) | — |
+| CI/CD | GitHub Actions | — |
+| SAST | Bandit | 1.7.x |
+| DAST | OWASP ZAP Baseline | — |
+| Image scan | Trivy | — |
+| Registry | Docker Hub | — |
+| Dependências | Dependabot (pip + Actions) | — |
+| [Banco de dados] | [ex: PostgreSQL 16 / Redis 7] | — |
+| [ORM/cliente] | [ex: SQLAlchemy / psycopg2] | — |
+| [Outros] | — | — |
+
+---
+
+## 3. Variáveis de ambiente
+
+> Manter `.env.example` sempre atualizado. Nunca commitar `.env`.
+
+### Aplicação
+
+| Variável | Obrigatória | Padrão | Descrição |
+|---|---|---|---|
+| `LOG_LEVEL` | Não | `INFO` | Nível de log (DEBUG, INFO, WARNING, ERROR) |
+| `DEBUG` | Não | `false` | Modo debug Flask — nunca `true` em produção |
+| `SECRET_KEY` | Sim | — | Chave secreta Flask (`python -c "import secrets; print(secrets.token_hex(32))"`) |
+
+### Banco de dados
+
+| Variável | Obrigatória | Padrão | Descrição |
+|---|---|---|---|
+| `DATABASE_URL` | [Sim/Não] | — | `postgresql://user:pass@host:5432/db` |
+
+### Integrações externas
+
+| Variável | Obrigatória | Padrão | Descrição |
+|---|---|---|---|
+| `[NOME_DA_VAR]` | [Sim/Não] | — | [O que é / para que serve] |
+
+### CI/CD (org-level — não configurar por repo)
+
+| Variável | Tipo | Configurado em |
+|---|---|---|
+| `DOCKERHUB_TOKEN` | Secret | Org `Build-To-learn-Lamarca` |
+| `DOCKERHUB_USERNAME` | Variable | Org `Build-To-learn-Lamarca` |
+
+---
+
+## 4. Estrutura do diretório
+
+```
+[nome-do-repo]/
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py          # Application factory (create_app)
+│   │   ├── main.py              # Entry point gunicorn
+│   │   └── routes/
+│   │       ├── health.py        # GET /health, GET /ready
+│   │       └── [recurso].py     # [Descrever recurso principal]
+│   ├── tests/
+│   │   ├── conftest.py          # Fixtures compartilhadas
+│   │   ├── test_health.py
+│   │   └── test_[recurso].py
+│   ├── requirements.txt         # Runtime deps
+│   └── requirements-dev.txt     # Dev/lint/test deps
+├── .github/
+│   ├── workflows/
+│   │   ├── pr-checks.yml        # Lint + SAST + DAST (constrói Dockerfile inline)
+│   │   └── build-publish.yml    # Constrói Dockerfile → Trivy → Docker Hub
+│   ├── dependabot.yml
+│   ├── CODEOWNERS
+│   └── PULL_REQUEST_TEMPLATE.md
+├── .cursor/
+│   └── rules/
+│       └── project-context.mdc  # Este arquivo
+├── .pre-commit-config.yaml
+├── pyproject.toml
+└── .env.example
+```
+
+---
+
+## 5. Serviços, jobs e models
+
+### Endpoints da API
+
+| Método | Path | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/health` | Liveness probe | Não |
+| `GET` | `/ready` | Readiness probe | Não |
+| `GET` | `/api/v1/[recurso]` | [Descrever] | [Sim/Não] |
+| `POST` | `/api/v1/[recurso]` | [Descrever] | [Sim/Não] |
+
+### Jobs / Workers
+
+| Job | Trigger | Descrição |
+|---|---|---|
+| [nome] | [cron / evento / manual] | [O que faz] |
+
+### Models / Entidades de domínio
+
+| Model | Campos principais | Persistência |
+|---|---|---|
+| `[NomeModel]` | `id`, `[campo1]`, `[campo2]` | [PostgreSQL / Redis / memória] |
+
+---
+
+## 6. Common hurdles e soluções documentadas
+
+| Problema | Causa provável | Solução |
+|---|---|---|
+| `pre-commit` falha com "mypy not found" | mypy não instalado no virtualenv | `pip install -r backend/requirements-dev.txt` |
+| Black e isort em conflito | isort sem `profile = "black"` | Verificar `[tool.isort] profile = "black"` no `pyproject.toml` |
+| Trivy bloqueia build por CVE | Vuln em dependência da imagem | Atualizar pacote afetado ou ajustar `ignore-unfixed: true` |
+| ZAP DAST falha por timeout | App não sobe a tempo no CI | Aumentar iterações do wait loop no job `dast` em `pr-checks.yml` |
+| `DOCKERHUB_TOKEN` não encontrado | Secret não herdado da org | Verificar em Settings → Secrets → que a org secret está visível |
+| Branch protection bloqueia commit direto | Configuração correta — não é um bug | Criar branch, abrir PR, aguardar aprovação de code owner |
+| [Problema específico deste serviço] | [Causa] | [Solução] |
+
+---
+
+## 7. Design patterns do projeto
+
+- **Application factory:** `create_app()` em `backend/app/__init__.py` — facilita testes e múltiplos configs.
+- **Blueprint por recurso:** cada domínio em `backend/app/routes/<recurso>.py` registrado como Blueprint.
+- **Separação app/infra:** Dockerfile e docker-compose construídos pelo CI/CD — projeto contém apenas código.
+- **Pre-commit gates locais:** Black → isort → Ruff → mypy rodados antes de qualquer commit.
+- **PR-first:** nenhum código chega em `main` sem PR, aprovação de code owner e CI verde.
+- **Imagem versionada:** Docker Hub recebe `latest` + `sha-<commit>` a cada merge em main.
+- **[Pattern específico deste serviço]:** [Descrever]
+
+---
+
+## 8. Pipeline semanal
+
+| Dia | Horário | Atividade |
+|---|---|---|
+| Segunda | 09:00 | Review do repositório: PRs abertas, alertas Dependabot, alertas Secret Scanning |
+| Terça | 14:00 | Atualizar dependências (`pip list --outdated`); aceitar PRs do Dependabot se CI verde |
+| Quarta | 10:00 | Rodar testes e lint localmente (`pytest`, `pre-commit run --all-files`) |
+| Quinta | 15:00 | Revisar cobertura de testes (`pytest --cov`) e criar issues para gaps |
+| Sexta | 17:00 | Executar checklist pós-implementação se houve mudanças na semana |
+
+---
+
+## 9. Checklist pós-implementação
+
+Após qualquer mudança relevante:
+
+### Código
+
+- [ ] Testes escritos e passando (`pytest --cov --cov-fail-under=80`)
+- [ ] `pre-commit run --all-files` sem erros (Black, isort, Ruff, mypy)
+- [ ] Sem secrets hardcoded — verificar com `git diff` antes do commit
+- [ ] `.env.example` atualizado com novas variáveis
+
+### CI/CD
+
+- [ ] PR aberta — nunca push direto em `main`
+- [ ] Jobs `lint-test`, `sast`, `dast` verdes na PR
+- [ ] Aprovação de code owner obtida antes do merge
+- [ ] Após merge: verificar job `build-publish` e imagem no Docker Hub
+
+### Documentação
+
+- [ ] Este arquivo (`project-context.mdc`) atualizado com novos endpoints, models ou variáveis
+- [ ] `README.md` atualizado se mudou forma de rodar ou configurar
+- [ ] "Common hurdles" atualizado se um novo problema recorrente foi encontrado
+
+### Segurança
+
+- [ ] Nenhum alerta novo em Security → Secret scanning alerts
+- [ ] Nenhum alerta crítico/alto em Security → Dependabot alerts sem plano de ação
+- [ ] Imagem publicada sem CVEs críticos/altos (verificar resultado do Trivy no workflow)

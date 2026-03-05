@@ -60,9 +60,10 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-report
+          name: coverage-report-${{ github.run_id }}
           path: coverage.xml
           retention-days: 7
+          overwrite: true
 
   # ── 2. SAST — Bandit (Python static security analysis) ─────────────────────
   sast:
@@ -203,9 +204,10 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: zap-baseline-report
+          name: zap-baseline-report-${{ github.run_id }}
           path: report_html.html
           retention-days: 7
+          overwrite: true
 
       - name: Stop application container
         if: always()
