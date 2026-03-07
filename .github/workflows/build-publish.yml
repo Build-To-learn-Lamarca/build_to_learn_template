@@ -112,34 +112,32 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Trivy — vulnerability scan ─────────────────────────────────────────
-      # trivy-action@0.28.0 had install/run regressions; 0.31.x is more stable
-      # exit-code: '0' para sempre gerar trivy-results.sarif; o gate que bloqueia push é o passo abaixo (format: table).
+      # ── Trivy — vulnerability scan (container; evita falha de install da trivy-action) ──
       - name: Trivy — scan image (SARIF upload)
-        uses: aquasecurity/trivy-action@0.31.0
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:latest
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "0"
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/out \
+            aquasecurity/trivy:0.63.0 image \
+            --format sarif --output /out/trivy-results.sarif \
+            --severity CRITICAL,HIGH --ignore-unfixed \
+            ${{ env.IMAGE_NAME }}:latest
 
       - name: Upload Trivy SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
-        if: success()   # Só faz upload se o passo anterior gerou trivy-results.sarif (evita erro "Path does not exist")
+        if: success()
         with:
           sarif_file: trivy-results.sarif
           category: trivy-image
 
       - name: Trivy — fail on CRITICAL/HIGH (blocking gate before push)
-        uses: aquasecurity/trivy-action@0.31.0
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:latest
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasecurity/trivy:0.63.0 image \
+            --format table --exit-code 1 \
+            --severity CRITICAL,HIGH --ignore-unfixed \
+            ${{ env.IMAGE_NAME }}:latest
 
       # ── Login & Push (only if Trivy passes) ───────────────────────────────
       - name: Login to Docker Hub
