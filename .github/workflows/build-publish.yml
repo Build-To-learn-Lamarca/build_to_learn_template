@@ -118,7 +118,7 @@ jobs:
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD":/out \
-            aquasecurity/trivy:0.63.0 image \
+            aquasec/trivy:0.63.0 image \
             --format sarif --output /out/trivy-results.sarif \
             --severity CRITICAL,HIGH --ignore-unfixed \
             ${{ env.IMAGE_NAME }}:latest
@@ -134,7 +134,7 @@ jobs:
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasecurity/trivy:0.63.0 image \
+            aquasec/trivy:0.63.0 image \
             --format table --exit-code 1 \
             --severity CRITICAL,HIGH --ignore-unfixed \
             ${{ env.IMAGE_NAME }}:latest
