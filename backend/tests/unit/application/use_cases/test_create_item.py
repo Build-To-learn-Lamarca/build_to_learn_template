@@ -6,7 +6,6 @@ import pytest
 
 from app.application.dto.item_dto import CreateItemRequest
 from app.application.use_cases import CreateItemUseCase
-from app.domain.entities.item import Item
 from tests.unit.application.fakes import FailingItemRepository, InMemoryItemRepository
 
 

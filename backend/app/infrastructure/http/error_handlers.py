@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 
 
 def _error_response(message: str, status_code: int, code: str | None = None) -> tuple[dict[str, Any], int]:
