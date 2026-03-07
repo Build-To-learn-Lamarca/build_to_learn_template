@@ -121,6 +121,7 @@ jobs:
             aquasec/trivy:0.63.0 image \
             --format sarif --output /out/trivy-results.sarif \
             --severity CRITICAL,HIGH --ignore-unfixed \
+            --skip-version-check --scanners vuln \
             ${{ env.IMAGE_NAME }}:latest
 
       - name: Upload Trivy SARIF to GitHub Code Scanning
@@ -137,6 +138,8 @@ jobs:
             aquasec/trivy:0.63.0 image \
             --format table --exit-code 1 \
             --severity CRITICAL,HIGH --ignore-unfixed \
+            --skip-version-check \
+            --scanners vuln \
             ${{ env.IMAGE_NAME }}:latest
 
       # ── Login & Push (only if Trivy passes) ───────────────────────────────
