@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 from flask_limiter import Limiter
 
 from app.application.dto.item_dto import CreateItemRequest
@@ -15,13 +15,13 @@ def create_items_blueprint(controller: ItemController, limiter: Limiter) -> Blue
 
     @bp.route("/items", methods=["GET"])
     @limiter.limit("60 per minute")
-    def list_items() -> tuple:
+    def list_items() -> tuple[Response, int]:
         body, status = controller.list_items()
         return jsonify(body), status
 
     @bp.route("/items", methods=["POST"])
     @limiter.limit("30 per minute")
-    def create_item() -> tuple:
+    def create_item() -> tuple[Response, int]:
         raw = request.get_json(silent=True)
         req: CreateItemRequest | None = None
         if raw and isinstance(raw.get("name"), str):
