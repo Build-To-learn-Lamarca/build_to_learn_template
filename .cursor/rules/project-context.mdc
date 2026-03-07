@@ -36,7 +36,8 @@ Exemplo:
 | Runtime | Python | 3.11 |
 | Framework | Flask | 3.0.x |
 | Servidor WSGI | Gunicorn | 22.x |
-| Testes | pytest + pytest-cov | 8.x |
+| Testes (Python) | pytest + pytest-cov | 8.x |
+| Testes (JavaScript) | Jest | 29.x |
 | Linter | Ruff | 0.5.x |
 | Formatter | Black | 24.x |
 | Import sorter | isort | 5.x |
@@ -49,8 +50,8 @@ Exemplo:
 | Image scan | Trivy | — |
 | Registry | Docker Hub | — |
 | Dependências | Dependabot (pip + Actions) | — |
-| [Banco de dados] | [ex: PostgreSQL 16 / Redis 7] | — |
-| [ORM/cliente] | [ex: SQLAlchemy / psycopg2] | — |
+| Banco (dev) | SQLite (stdlib sqlite3) | — |
+| Banco (prod) | Configurável via DATABASE_URL (ex: PostgreSQL) | — |
 | [Outros] | — | — |
 
 ---
@@ -71,7 +72,8 @@ Exemplo:
 
 | Variável | Obrigatória | Padrão | Descrição |
 |---|---|---|---|
-| `DATABASE_URL` | [Sim/Não] | — | `postgresql://user:pass@host:5432/db` |
+| `SQLITE_PATH` | Não | `data/app.db` | Caminho do arquivo SQLite (dev); diretório criado se não existir |
+| `DATABASE_URL` | Não | — | Em produção, definir para usar outro adapter (ex: `postgresql://user:pass@host:5432/db`) |
 
 ### Integrações externas
 
@@ -88,23 +90,37 @@ Exemplo:
 
 ---
 
-## 4. Estrutura do diretório
+## 4. Estrutura do diretório (Clean Architecture + DDD)
 
 ```
 [nome-do-repo]/
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py          # Application factory (create_app)
-│   │   ├── main.py              # Entry point gunicorn
-│   │   └── routes/
-│   │       ├── health.py        # GET /health, GET /ready
-│   │       └── [recurso].py     # [Descrever recurso principal]
+│   │   ├── __init__.py              # Application factory + DI (create_app)
+│   │   ├── main.py                  # Entry point gunicorn
+│   │   ├── config.py                # Configuração (env, SQLITE_PATH, DATABASE_URL)
+│   │   ├── logging_config.py       # structlog (JSON em prod, console em dev)
+│   │   ├── domain/                  # DDD — entidades e value objects (sem Flask/DB)
+│   │   │   ├── entities/
+│   │   │   └── value_objects/
+│   │   ├── application/             # Casos de uso e contratos
+│   │   │   ├── ports/               # Interfaces (ex: ItemRepository)
+│   │   │   ├── use_cases/           # Por domínio: items/create_item.py, list_items.py
+│   │   │   └── dto/
+│   │   └── infrastructure/
+│   │       ├── persistence/        # Implementações de repositório (ex: sqlite/)
+│   │       └── http/
+│   │           ├── error_handlers.py # 400, 404, 405, 429, 500 JSON
+│   │           ├── controllers/   # Recebem DTOs, chamam use cases
+│   │           └── routes/        # Blueprints (items com rate limit)
+│   ├── migrations/                  # 001_initial.sql; README (Alembic opcional)
 │   ├── tests/
-│   │   ├── conftest.py          # Fixtures compartilhadas
-│   │   ├── test_health.py
-│   │   └── test_[recurso].py
-│   ├── requirements.txt         # Runtime deps
-│   └── requirements-dev.txt     # Dev/lint/test deps
+│   │   ├── conftest.py
+│   │   ├── unit/                   # domain, application, infrastructure
+│   │   └── integration/
+│   │       └── http/               # Testes de rotas (client)
+│   ├── requirements.txt            # Runtime deps
+│   └── requirements-dev.txt        # Dev/lint/test deps
 ├── .github/
 │   ├── workflows/
 │   │   ├── pr-checks.yml        # Lint + SAST + DAST (constrói Dockerfile inline)
@@ -112,11 +128,15 @@ Exemplo:
 │   ├── dependabot.yml
 │   ├── CODEOWNERS
 │   └── PULL_REQUEST_TEMPLATE.md
+├── scripts/
+│   └── js/                         # Exemplo/testes JavaScript (Jest)
 ├── .cursor/
 │   └── rules/
-│       └── project-context.mdc  # Este arquivo
+│       └── project-context.mdc
 ├── .pre-commit-config.yaml
 ├── pyproject.toml
+├── package.json                    # npm scripts; Jest para testes JS
+├── jest.config.js
 └── .env.example
 ```
 
@@ -130,8 +150,8 @@ Exemplo:
 |---|---|---|---|
 | `GET` | `/health` | Liveness probe | Não |
 | `GET` | `/ready` | Readiness probe | Não |
-| `GET` | `/api/v1/[recurso]` | [Descrever] | [Sim/Não] |
-| `POST` | `/api/v1/[recurso]` | [Descrever] | [Sim/Não] |
+| `GET` | `/api/v1/items` | Listar itens | Não |
+| `POST` | `/api/v1/items` | Criar item (body: `{"name": "string"}`) | Não |
 
 ### Jobs / Workers
 
@@ -143,7 +163,13 @@ Exemplo:
 
 | Model | Campos principais | Persistência |
 |---|---|---|
-| `[NomeModel]` | `id`, `[campo1]`, `[campo2]` | [PostgreSQL / Redis / memória] |
+| `Item` | `id`, `name` | SQLite (dev); trocável via porta `ItemRepository` |
+
+### Portas (application/ports)
+
+| Porta | Descrição |
+|---|---|
+| `ItemRepository` | `list() -> list[Item]`, `add(item: Item) -> Item` — implementações em infrastructure (ex: SQLite, Postgres) |
 
 ---
 
@@ -158,19 +184,24 @@ Exemplo:
 | `DOCKERHUB_TOKEN` não encontrado | Secret não herdado da org | Verificar em Settings → Secrets → que a org secret está visível |
 | Branch protection bloqueia commit direto | Configuração correta — não é um bug | Criar branch, abrir PR para homolog (ou homolog→main), aguardar aprovação quando exigido |
 | PR aberta para main por engano (feature) | Fluxo exige feature → homolog → main | Fechar PR e abrir PR da mesma branch para `homolog` |
+| Push rejeitado: "without \`workflow\` scope" | Token do `gh` não tem permissão para alterar workflows | Rodar `gh auth refresh -h github.com -s workflow` e concluir o fluxo no browser; depois `gh auth setup-git` |
+| Push rejeitado: "Changes must be made through a pull request" | Branch protection em main exige PR | Fazer push para uma branch (ex.: bootstrap/xxx), abrir PR no GitHub e fazer merge com bypass (Allow specified actors to bypass) ou desproteger main temporariamente |
 | [Problema específico deste serviço] | [Causa] | [Solução] |
 
 ---
 
 ## 7. Design patterns do projeto
 
-- **Application factory:** `create_app()` em `backend/app/__init__.py` — facilita testes e múltiplos configs.
-- **Blueprint por recurso:** cada domínio em `backend/app/routes/<recurso>.py` registrado como Blueprint.
+- **Clean Architecture + DDD:** domínio no centro (sem dependências externas); aplicação com portas e use cases; infraestrutura com controllers, rotas e repositórios.
+- **Application factory:** `create_app()` em `backend/app/__init__.py` — wiring de repositório, use cases, controller e blueprints.
+- **Controllers vs rotas:** rotas (blueprints) só fazem parse da request e chamam o controller; controllers recebem DTOs, chamam use cases e retornam (body, status).
+- **Portas e adapters:** interfaces em `application/ports/` (ex: `ItemRepository`); implementações em `infrastructure/persistence/` (ex: SQLite; trocar para Postgres sem alterar domínio/aplicação).
+- **Blueprint por recurso:** cada recurso em `infrastructure/http/routes/` com factory que recebe o controller injetado.
 - **Separação app/infra:** Dockerfile e docker-compose construídos pelo CI/CD — projeto contém apenas código.
 - **Pre-commit gates locais:** Black → isort → Ruff → mypy rodados antes de qualquer commit.
 - **PR-first:** código novo vai para `homolog` via PR (feature → homolog); `main` recebe apenas merges a partir de `homolog`, com aprovação de code owner e CI verde.
 - **Imagem versionada:** Docker Hub recebe `latest` + `sha-<commit>` a cada merge em main.
-- **[Pattern específico deste serviço]:** [Descrever]
+- **Testes:** pytest para Python (unit em `tests/unit/`, integration em `tests/integration/http/`); Jest para JavaScript (`npm test`, ex.: `scripts/js/`).
 
 ---
 
