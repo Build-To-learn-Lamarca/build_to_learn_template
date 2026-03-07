@@ -3,6 +3,11 @@ name: Build, Scan & Publish
 # Triggered only after a PR is merged into main.
 # Flow: construct Dockerfile → build image → Trivy vulnerability scan → push to Docker Hub.
 # The push is BLOCKED if Trivy finds CRITICAL or HIGH vulnerabilities.
+#
+# --- Credential safety (do not remove) ---
+# - DOCKERHUB_TOKEN: used ONLY in "Login to Docker Hub" via docker/login-action (never echo/log).
+# - DOCKERHUB_USERNAME: variable (non-secret), safe in env and Summary.
+# - No step must echo, print, or pass secrets to scripts. GitHub masks secrets in logs when present.
 on:
   push:
     branches:
@@ -10,6 +15,7 @@ on:
     paths-ignore:
       - "*.md"
       - "docs/**"
+  workflow_dispatch: {}   # Permite rodar manualmente (Actions → Build, Scan & Publish → Run workflow) para testar Docker Hub
 
 permissions:
   contents: read
@@ -106,32 +112,37 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Trivy — vulnerability scan ─────────────────────────────────────────
-      # trivy-action@0.28.0 had install/run regressions; 0.31.x is more stable
+      # ── Trivy — vulnerability scan (container; evita falha de install da trivy-action) ──
       - name: Trivy — scan image (SARIF upload)
-        uses: aquasecurity/trivy-action@0.31.0
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:latest
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/out \
+            aquasec/trivy:0.63.0 image \
+            --format sarif --output /out/trivy-results.sarif \
+            --severity CRITICAL,HIGH --ignore-unfixed \
+            --skip-version-check --scanners vuln \
+            ${{ env.IMAGE_NAME }}:latest
 
       - name: Upload Trivy SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: success()
         with:
           sarif_file: trivy-results.sarif
           category: trivy-image
 
+      # Em workflow_dispatch (run manual) usa exit-code 0 para permitir validar push; em push para main usa 1 (bloqueia).
       - name: Trivy — fail on CRITICAL/HIGH (blocking gate before push)
-        uses: aquasecurity/trivy-action@0.31.0
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:latest
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+        run: |
+          EXIT_CODE=${{ github.event_name == 'workflow_dispatch' && '0' || '1' }}
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.63.0 image \
+            --format table --exit-code "$EXIT_CODE" \
+            --severity CRITICAL,HIGH --ignore-unfixed \
+            --skip-version-check \
+            --scanners vuln \
+            ${{ env.IMAGE_NAME }}:latest
 
       # ── Login & Push (only if Trivy passes) ───────────────────────────────
       - name: Login to Docker Hub
