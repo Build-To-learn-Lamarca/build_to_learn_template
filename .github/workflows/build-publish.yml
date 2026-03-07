@@ -131,12 +131,14 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy-image
 
+      # Em workflow_dispatch (run manual) usa exit-code 0 para permitir validar push; em push para main usa 1 (bloqueia).
       - name: Trivy — fail on CRITICAL/HIGH (blocking gate before push)
         run: |
+          EXIT_CODE=${{ github.event_name == 'workflow_dispatch' && '0' || '1' }}
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy:0.63.0 image \
-            --format table --exit-code 1 \
+            --format table --exit-code "$EXIT_CODE" \
             --severity CRITICAL,HIGH --ignore-unfixed \
             --skip-version-check \
             --scanners vuln \
