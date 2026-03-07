@@ -1,13 +1,11 @@
-# api-container — Template de API Containerizada
+# build-to-learn-template — Template para microsserviços e páginas web
 
-Template production-ready para APIs Python (Flask) containerizadas com CI/CD
-automatizado no GitHub Actions.
+Template production-ready com **Clean Architecture + DDD**: APIs Python (Flask), testes com pytest (Python) e Jest (JavaScript), persistência em SQLite (dev) com interface trocável para qualquer banco.
 
 > **Princípio de separação de responsabilidades:** o projeto contém apenas
 > código de aplicação. O `Dockerfile`, `.dockerignore` e `docker-compose.yml`
 > **não estão no repositório** — eles são **construídos pelo processo de CI/CD**
-> (workflows GitHub Actions) e pelo script de setup local. Isso mantém o projeto
-> limpo de infraestrutura e centraliza a definição da imagem no CI/CD.
+> (workflows GitHub Actions) e pelo script de setup local.
 
 ---
 
@@ -15,9 +13,12 @@ automatizado no GitHub Actions.
 
 | Categoria | Ferramentas |
 |---|---|
+| Arquitetura | Clean Architecture + DDD (domain, application, infrastructure) |
 | Framework | Flask 3 + Gunicorn |
+| Banco (dev) | SQLite; porta trocável para PostgreSQL/outros |
 | Qualidade de código | Black, isort, Ruff, mypy, pre-commit |
-| Testes | pytest + pytest-cov |
+| Testes Python | pytest + pytest-cov (unit + integration) |
+| Testes JavaScript | Jest (ex.: `scripts/js/`, frontend futuro) |
 | Container | Docker multi-stage (non-root) — construído pelo CI/CD |
 | CI — Lint & Test | GitHub Actions (Ruff, mypy, pytest) |
 | CI — SAST | Bandit (Python) → SARIF → GitHub Code Scanning |
@@ -34,31 +35,63 @@ automatizado no GitHub Actions.
 .
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py          # Application factory
-│   │   ├── main.py              # Entry point (gunicorn)
-│   │   └── routes/
-│   │       ├── health.py        # GET /health, GET /ready
-│   │       └── example.py       # GET /api/v1/items, POST /api/v1/items
+│   │   ├── __init__.py              # Application factory + wiring (create_app)
+│   │   ├── main.py                  # Entry point (gunicorn)
+│   │   ├── config.py                # Config (LOG_LEVEL, SQLITE_PATH, DATABASE_URL)
+│   │   ├── domain/                  # DDD — entidades e value objects
+│   │   │   └── entities/
+│   │   ├── application/             # Portas, use cases, DTOs
+│   │   │   ├── ports/
+│   │   │   ├── use_cases/
+│   │   │   └── dto/
+│   │   └── infrastructure/
+│   │       ├── persistence/        # Repositórios (ex.: SQLite)
+│   │       └── http/
+│   │           ├── controllers/    # Chamam use cases, retornam (body, status)
+│   │           └── routes/         # Blueprints: request → controller → response
 │   ├── tests/
 │   │   ├── conftest.py
-│   │   ├── test_health.py
-│   │   └── test_example.py
+│   │   ├── unit/                    # domain, application, infrastructure
+│   │   └── integration/
+│   │       └── http/                # Testes de rotas (client)
 │   ├── requirements.txt
 │   └── requirements-dev.txt
+├── scripts/
+│   └── js/                          # Exemplo e testes Jest (npm test)
 ├── .github/
 │   ├── workflows/
-│   │   ├── pr-checks.yml        # Lint + SAST + DAST na PR (constrói Dockerfile inline)
-│   │   └── build-publish.yml    # Constrói Dockerfile → Trivy scan → Docker Hub
+│   │   ├── pr-checks.yml
+│   │   └── build-publish.yml
 │   ├── dependabot.yml
 │   ├── CODEOWNERS
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── .pre-commit-config.yaml
-├── pyproject.toml               # Black, isort, Ruff, mypy, pytest config
+├── pyproject.toml
+├── package.json                     # npm test (Jest)
+├── jest.config.js
 └── .env.example
 ```
 
 > Não há `Dockerfile`, `docker-compose.yml` nem `.dockerignore` no projeto.
 > Veja a seção **Rodar com Docker localmente** para gerar esses arquivos.
+
+---
+
+## Como adicionar um novo domínio/entidade
+
+Seguindo Clean Architecture + DDD, para expor um novo recurso (ex.: `Product`) na API:
+
+1. **Domain** — Crie a entidade em `backend/app/domain/entities/<nome>.py` (dataclass com id e atributos). Escreva testes em `backend/tests/unit/domain/entities/test_<nome>.py`.
+
+2. **Application — Porta** — Defina a interface do repositório em `backend/app/application/ports/<nome>_repository.py` (Protocol com `list()`, `add()`, etc.). Exporte em `application/ports/__init__.py`.
+
+3. **Application — DTOs** — Crie request/response em `backend/app/application/dto/<nome>_dto.py` (ex.: `CreateProductRequest`, `ProductResponse.from_entity()`). Exporte em `application/dto/__init__.py`.
+
+4. **Application — Use cases** — Implemente os casos de uso em `backend/app/application/use_cases/<nome>.py` (ex.: `ListProductsUseCase`, `CreateProductUseCase`) injetando a porta do repositório. Teste com um fake em `backend/tests/unit/application/use_cases/`.
+
+5. **Infrastructure — Persistência** — Implemente a porta em `backend/app/infrastructure/persistence/sqlite/<nome>_repository.py` (e adicione a tabela em `schema.py` e em `backend/migrations/001_initial.sql` ou em uma nova migration). Teste em `backend/tests/unit/infrastructure/persistence/`.
+
+6. **Infrastructure — HTTP** — Crie o controller em `backend/app/infrastructure/http/controllers/<nome>_controller.py` e o blueprint em `backend/app/infrastructure/http/routes/<nome>.py` (factory que recebe controller e limiter). Registre o blueprint em `create_app()` em `backend/app/__init__.py` (repositório → use cases → controller → blueprint). Adicione testes de integração em `backend/tests/integration/http/test_<nome>.py`.
 
 ---
 
@@ -165,14 +198,40 @@ cp .env.example .env
 # Editar .env com os valores locais (nunca commitar o .env)
 ```
 
+Principais variáveis (ver `.env.example`):
+
+| Variável | Uso |
+|----------|-----|
+| `LOG_LEVEL` | Nível de log (DEBUG, INFO, etc.) |
+| `DEBUG` | Modo debug Flask (nunca `true` em produção) |
+| `SECRET_KEY` | Chave secreta Flask |
+| `SQLITE_PATH` | Caminho do arquivo SQLite em dev (padrão: `data/app.db`) |
+| `DATABASE_URL` | Em produção, definir para outro banco (ex.: PostgreSQL) |
+
+### Rodar testes
+
+```bash
+# Testes Python (pytest) — unit + integration
+cd backend  # ou, a partir da raiz:
+python -m pytest backend/tests/ -v
+
+# Com cobertura
+python -m pytest backend/tests/ --cov=app --cov-report=term-missing
+
+# Testes JavaScript (Jest) — quando houver código em scripts/js ou frontend
+npm install
+npm test
+```
+
 ### Rodar localmente
 
 ```bash
-# Direto com Python (desenvolvimento)
-python -m backend.app.main
+# A partir da raiz do repositório (backend no PYTHONPATH)
+cd backend
+python -m app.main
 
-# Ou com gunicorn
-gunicorn --bind 0.0.0.0:5000 --reload backend.app.main:app
+# Ou com gunicorn (a partir da raiz, com backend no path)
+cd backend && gunicorn --bind 0.0.0.0:5000 --reload app.main:app
 ```
 
 ### Rodar com Docker localmente

@@ -107,8 +107,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       # ── Trivy — vulnerability scan ─────────────────────────────────────────
+      # trivy-action@0.28.0 had install/run regressions; 0.31.x is more stable
       - name: Trivy — scan image (SARIF upload)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.31.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:latest
           format: sarif
@@ -124,7 +125,7 @@ jobs:
           category: trivy-image
 
       - name: Trivy — fail on CRITICAL/HIGH (blocking gate before push)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.31.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:latest
           format: table

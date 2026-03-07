@@ -1,4 +1,4 @@
-"""Health check endpoint."""
+"""Health check routes — liveness and readiness."""
 
 from __future__ import annotations
 
