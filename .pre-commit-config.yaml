@@ -1,11 +1,12 @@
 # Pre-commit hooks for the api-container template.
 #
 # Execution order matters:
-#   1. General hygiene (trailing whitespace, file endings, yaml/toml check)
-#   2. Black — formats Python code first
-#   3. isort — sorts imports in Black-compatible mode
-#   4. Ruff — lints after formatting (won't fight Black/isort)
-#   5. mypy  — type-checks last (needs formatted + linted code)
+#   1. Block .env / *.env from being committed (.env.example allowed)
+#   2. General hygiene (trailing whitespace, file endings, yaml/toml check)
+#   3. Black — formats Python code first
+#   4. isort — sorts imports in Black-compatible mode
+#   5. Ruff — lints after formatting (won't fight Black/isort)
+#   6. mypy  — type-checks last (needs formatted + linted code)
 #
 # All Python hooks are scoped to `backend/` via the `files` key so they
 # never run on unrelated files and don't conflict with each other.
@@ -17,6 +18,15 @@ default_language_version:
   python: python3.11
 
 repos:
+  # ── Block .env files (allow .env.example); secret scanning validates content ─
+  - repo: local
+    hooks:
+      - id: check-no-env-committed
+        name: block .env / *.env from commit
+        entry: python scripts/check_no_env_committed.py
+        language: system
+        pass_filenames: false
+
   # ── General file hygiene ──────────────────────────────────────────────────
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0

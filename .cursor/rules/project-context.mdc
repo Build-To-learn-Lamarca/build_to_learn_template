@@ -156,7 +156,8 @@ Exemplo:
 | Trivy bloqueia build por CVE | Vuln em dependência da imagem | Atualizar pacote afetado ou ajustar `ignore-unfixed: true` |
 | ZAP DAST falha por timeout | App não sobe a tempo no CI | Aumentar iterações do wait loop no job `dast` em `pr-checks.yml` |
 | `DOCKERHUB_TOKEN` não encontrado | Secret não herdado da org | Verificar em Settings → Secrets → que a org secret está visível |
-| Branch protection bloqueia commit direto | Configuração correta — não é um bug | Criar branch, abrir PR, aguardar aprovação de code owner |
+| Branch protection bloqueia commit direto | Configuração correta — não é um bug | Criar branch, abrir PR para homolog (ou homolog→main), aguardar aprovação quando exigido |
+| PR aberta para main por engano (feature) | Fluxo exige feature → homolog → main | Fechar PR e abrir PR da mesma branch para `homolog` |
 | [Problema específico deste serviço] | [Causa] | [Solução] |
 
 ---
@@ -167,7 +168,7 @@ Exemplo:
 - **Blueprint por recurso:** cada domínio em `backend/app/routes/<recurso>.py` registrado como Blueprint.
 - **Separação app/infra:** Dockerfile e docker-compose construídos pelo CI/CD — projeto contém apenas código.
 - **Pre-commit gates locais:** Black → isort → Ruff → mypy rodados antes de qualquer commit.
-- **PR-first:** nenhum código chega em `main` sem PR, aprovação de code owner e CI verde.
+- **PR-first:** código novo vai para `homolog` via PR (feature → homolog); `main` recebe apenas merges a partir de `homolog`, com aprovação de code owner e CI verde.
 - **Imagem versionada:** Docker Hub recebe `latest` + `sha-<commit>` a cada merge em main.
 - **[Pattern específico deste serviço]:** [Descrever]
 
@@ -198,10 +199,10 @@ Após qualquer mudança relevante:
 
 ### CI/CD
 
-- [ ] PR aberta — nunca push direto em `main`
-- [ ] Jobs `lint-test`, `sast`, `dast` verdes na PR
-- [ ] Aprovação de code owner obtida antes do merge
-- [ ] Após merge: verificar job `build-publish` e imagem no Docker Hub
+- [ ] PR para `homolog` para features/correções — nunca push direto em `main` nem PR direto para main
+- [ ] Jobs `check-env`, `lint-test`, `sast`, `dast` verdes na PR
+- [ ] Para release: PR `homolog` → `main`; aprovação de code owner obrigatória no merge para main
+- [ ] Após merge em main: verificar job `build-publish` e imagem no Docker Hub
 
 ### Documentação
 
