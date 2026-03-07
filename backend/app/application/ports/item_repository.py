@@ -12,8 +12,8 @@ class ItemRepository(Protocol):
 
     def list(self) -> list[Item]:
         """Return all items."""
-        ...
+        pass
 
     def add(self, item: Item) -> Item:
         """Persist item and return it (e.g. with generated id)."""
-        ...
+        pass
