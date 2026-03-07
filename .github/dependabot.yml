@@ -12,6 +12,7 @@ updates:
   # ── Python (pip) ───────────────────────────────────────────────────────────
   - package-ecosystem: "pip"
     directory: "/backend"
+    target-branch: "homolog"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -34,6 +35,7 @@ updates:
   # ── Docker (base image) ────────────────────────────────────────────────────
   - package-ecosystem: "docker"
     directory: "/"
+    target-branch: "homolog"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -49,6 +51,7 @@ updates:
   # ── GitHub Actions ─────────────────────────────────────────────────────────
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "homolog"
     schedule:
       interval: "weekly"
       day: "monday"

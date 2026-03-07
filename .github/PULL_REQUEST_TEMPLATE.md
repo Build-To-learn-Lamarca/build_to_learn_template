@@ -1,3 +1,7 @@
+# Pull Request
+
+**PR para `homolog`:** features e correções. **PR para `main`:** apenas release a partir de homolog (time CODEOWNERS).
+
 ## Description
 
 <!-- Briefly describe WHAT was changed and WHY. -->

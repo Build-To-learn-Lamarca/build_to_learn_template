@@ -90,14 +90,28 @@ Edite `.github/CODEOWNERS` e substitua os placeholders pelos usuários/teams rea
 *   @sua-org/seu-time
 ```
 
-### 4. Habilitar branch protection em `main`
+### 4. Criar a branch `homolog` e habilitar branch protection
 
-Siga as instruções em [`templates/ci-cd/branch-protection.md`](../../ci-cd/branch-protection.md) (ou o arquivo copiado para este repo).
+**Branch `homolog` (homologação):** o fluxo usa três níveis — feature → homolog → main. A branch `homolog` deve existir. Crie-a uma vez a partir de `main`:
 
-Resumo das regras a habilitar:
-- Require a pull request before merging (1 approval)
-- Require review from Code Owners
-- Require status checks: `lint-test`, `sast`, `dast`
+```bash
+git checkout main && git pull origin main
+git checkout -b homolog && git push -u origin homolog
+```
+
+**Proteção da branch `main` (produção):**
+
+- Require a pull request before merging
+- Require review from Code Owners (apenas o time CODEOWNERS aprova merge em main)
+- Require status checks: `check-env`, `lint-test`, `sast`, `dast`
+- Do not allow bypassing
+- Convenção: merge em `main` apenas a partir de `homolog` (PR homolog → main)
+
+**Proteção da branch `homolog` (testes):**
+
+- Require a pull request before merging
+- Require status checks: `check-env`, `lint-test`, `sast`, `dast`
+- Opcional: require 1 approval ou Code Owners review (conforme política do time)
 - Do not allow bypassing
 
 ### 5. Habilitar Secret Scanning e Push Protection
@@ -124,8 +138,14 @@ alertas de segurança:
 ### Configurar ambiente
 
 ```bash
-# Clonar e entrar na pasta
+# Clonar (main = produção atual) e entrar na pasta
 git clone https://github.com/<owner>/<repo>.git && cd <repo>
+
+# Para implementar uma feature: criar branch a partir de main (ou homolog atualizado)
+# e abrir PR para homolog — nunca PR direto para main para features.
+git checkout main
+git pull origin main
+git checkout -b feature/minha-feature
 
 # Criar virtualenv e instalar dependências de desenvolvimento
 python -m venv .venv
@@ -218,24 +238,32 @@ mypy --config-file pyproject.toml
 
 ## Fluxo de CI/CD
 
+Fluxo em três níveis: **feature** → **homolog** (testes) → **main** (produção).
+
 ```
-Commit local
+Commit local (branch de feature)
     │
     ▼
 pre-commit  ── Black, isort, Ruff, mypy (bloqueia localmente)
     │
     ▼
-Pull Request → main
+Pull Request → homolog
     │
     ├── lint-test  ── Ruff, mypy, pytest (cobertura ≥ 80%)
     ├── sast       ── Bandit → SARIF → GitHub Code Scanning
     └── dast       ── Build + OWASP ZAP Baseline Scan
     │
     ▼
-Code Owner Review  ── Aprovação obrigatória
+Merge em homolog (quando tudo estiver ok)
     │
     ▼
-Merge em main
+[Quando estável]  Pull Request homolog → main
+    │
+    ▼
+Code Owner Review  ── Aprovação obrigatória (time CODEOWNERS)
+    │
+    ▼
+Merge em main (produção)
     │
     ▼
 build-publish

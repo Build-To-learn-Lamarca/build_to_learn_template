@@ -1,11 +1,12 @@
 name: PR Checks
 
-# Triggered on every pull request targeting main.
+# Triggered on every pull request targeting homolog or main.
 # ALL jobs must pass before a PR can be merged (enforced via branch protection
-# → Required status checks: lint-test, sast, dast).
+# → Required status checks: check-env, lint-test, sast, dast).
 on:
   pull_request:
     branches:
+      - homolog
       - main
     paths-ignore:
       - "*.md"
@@ -22,6 +23,27 @@ concurrency:
 
 # ──────────────────────────────────────────────────────────────────────────────
 jobs:
+
+  # ── 0. Block .env / *.env in PR (allow .env.example) ────────────────────────
+  check-env:
+    name: Check no .env committed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Block .env / *.env in PR
+        run: python scripts/check_no_env_committed.py origin/${{ github.base_ref }}
 
   # ── 1. Lint & Test ──────────────────────────────────────────────────────────
   lint-test:
