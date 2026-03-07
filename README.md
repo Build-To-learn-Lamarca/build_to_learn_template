@@ -104,16 +104,59 @@ Seguindo Clean Architecture + DDD, para expor um novo recurso (ex.: `Product`) n
    nome da imagem publicada no Docker Hub
    (`DOCKERHUB_USERNAME/<nome-do-repo>`).
 
-### 2. Configurar Secrets e Variables no GitHub
+### 2. Configurar Docker Hub (build e publicação de imagens)
 
-Em **Settings → Secrets and variables → Actions**:
+O CI/CD publica a imagem no Docker Hub em todo merge na `main`. É preciso configurar **uma vez** por repositório (ou na organização, para todos os repos).
 
-| Tipo | Nome | Valor |
-|---|---|---|
-| Secret | `DOCKERHUB_TOKEN` | Token de acesso do Docker Hub (read+write) |
-| Variable | `DOCKERHUB_USERNAME` | Seu usuário no Docker Hub |
+#### 2.1 Conta no Docker Hub
 
-Como gerar o token Docker Hub: [Docker Hub → Account Settings → Security → New Access Token](https://hub.docker.com/settings/security)
+- Crie uma conta em [hub.docker.com](https://hub.docker.com) ou use a da organização.
+- O nome de usuário define o prefixo das imagens: `DOCKERHUB_USERNAME/<nome-do-repo>` (ex.: `minhaorg/build_to_learn_template`).
+
+#### 2.2 Token de acesso (para o GitHub Actions)
+
+1. No Docker Hub: **Account Settings** → **Security** → **New Access Token**.
+2. Nome sugerido: `github-actions-<nome-do-repo>`.
+3. Permissão: **Read, Write, Delete** (o workflow faz push da imagem).
+4. Copie o token (ele só é exibido uma vez).
+
+Como gerar: [Docker Hub → New Access Token](https://hub.docker.com/settings/security)
+
+#### 2.3 Secrets e Variables no GitHub
+
+No repositório (ou na organização): **Settings** → **Secrets and variables** → **Actions**:
+
+| Tipo     | Nome                | Valor                          |
+|----------|---------------------|--------------------------------|
+| **Secret**   | `DOCKERHUB_TOKEN`   | Token gerado no passo 2.2      |
+| **Variable** | `DOCKERHUB_USERNAME`| Usuário ou organização no Docker Hub |
+
+- Em **Organization** → Settings → Secrets and variables → Actions: configurar aqui faz os repos herdarem (recomendado para vários projetos).
+- Em **Repository** → Settings → Secrets and variables → Actions: configurar só neste repo.
+
+#### 2.4 Uso local (Docker CLI / Docker Desktop)
+
+Para fazer `docker pull` ou `docker push` no seu ambiente (fora do GitHub Actions):
+
+```bash
+docker login
+# Username: seu-usuario-dockerhub
+# Password: use o token (não a senha da conta) se a conta tiver 2FA
+```
+
+Depois do login, você pode puxar a imagem publicada pelo CI, por exemplo:
+
+```bash
+docker pull DOCKERHUB_USERNAME/build_to_learn_template:latest
+```
+
+#### 2.5 Segurança de credenciais no CI/CD
+
+Para evitar vazamento de credenciais:
+
+- **Token:** use apenas **Secret** (`DOCKERHUB_TOKEN`). O workflow usa somente o passo **Login to Docker Hub** (action `docker/login-action`), que não faz echo nem log do valor — o GitHub mascara automaticamente secrets que apareçam em logs.
+- **Username:** use **Variable** (`DOCKERHUB_USERNAME`); não é sensível e pode aparecer em env e no Summary do job.
+- **Nunca:** fazer `echo`, `print` ou passar secrets para scripts nos workflows. Nenhum artefato enviado pelo CI deve conter `.env` ou tokens (o job **Check no .env committed** em PRs bloqueia commit de `.env`/`*.env`).
 
 ### 3. Configurar CODEOWNERS
 

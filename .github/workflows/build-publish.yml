@@ -3,6 +3,11 @@ name: Build, Scan & Publish
 # Triggered only after a PR is merged into main.
 # Flow: construct Dockerfile → build image → Trivy vulnerability scan → push to Docker Hub.
 # The push is BLOCKED if Trivy finds CRITICAL or HIGH vulnerabilities.
+#
+# --- Credential safety (do not remove) ---
+# - DOCKERHUB_TOKEN: used ONLY in "Login to Docker Hub" via docker/login-action (never echo/log).
+# - DOCKERHUB_USERNAME: variable (non-secret), safe in env and Summary.
+# - No step must echo, print, or pass secrets to scripts. GitHub masks secrets in logs when present.
 on:
   push:
     branches:
@@ -10,6 +15,7 @@ on:
     paths-ignore:
       - "*.md"
       - "docs/**"
+  workflow_dispatch: {}   # Permite rodar manualmente (Actions → Build, Scan & Publish → Run workflow) para testar Docker Hub
 
 permissions:
   contents: read
@@ -108,6 +114,7 @@ jobs:
 
       # ── Trivy — vulnerability scan ─────────────────────────────────────────
       # trivy-action@0.28.0 had install/run regressions; 0.31.x is more stable
+      # exit-code: '0' para sempre gerar trivy-results.sarif; o gate que bloqueia push é o passo abaixo (format: table).
       - name: Trivy — scan image (SARIF upload)
         uses: aquasecurity/trivy-action@0.31.0
         with:
@@ -116,10 +123,11 @@ jobs:
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          exit-code: "0"
 
       - name: Upload Trivy SARIF to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: success()   # Só faz upload se o passo anterior gerou trivy-results.sarif (evita erro "Path does not exist")
         with:
           sarif_file: trivy-results.sarif
           category: trivy-image
