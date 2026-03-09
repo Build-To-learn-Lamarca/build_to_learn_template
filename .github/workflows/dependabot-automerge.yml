@@ -1,0 +1,26 @@
+# Habilita auto-merge em PRs do Dependabot que tenham a label "automerge".
+# O merge só ocorre quando os checks obrigatórios da branch (ex.: pr-checks) passarem.
+# Assim a "revisão" é a própria validação do CI na PR.
+#
+# Requer: Settings → General → Pull Requests → Allow auto-merge
+
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  enable-automerge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]' && contains(join(github.event.pull_request.labels.*.name, ','), 'automerge')
+    steps:
+      - name: Enable auto-merge
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash
