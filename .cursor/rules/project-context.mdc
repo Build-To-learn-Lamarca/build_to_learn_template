@@ -186,6 +186,7 @@ Exemplo:
 | PR aberta para main por engano (feature) | Fluxo exige feature → homolog → main | Fechar PR e abrir PR da mesma branch para `homolog` |
 | Push rejeitado: "without \`workflow\` scope" | Token do `gh` não tem permissão para alterar workflows | Rodar `gh auth refresh -h github.com -s workflow` e concluir o fluxo no browser; depois `gh auth setup-git` |
 | Push rejeitado: "Changes must be made through a pull request" | Branch protection em main exige PR | Fazer push para uma branch (ex.: bootstrap/xxx), abrir PR no GitHub e fazer merge com bypass (Allow specified actors to bypass) ou desproteger main temporariamente |
+| Credencial vazando em log do Actions | Echo/print de secret ou passo que expõe token | Nunca usar `echo ${{ secrets.* }}` ou passar secret para script; usar apenas actions oficiais (ex.: docker/login-action) para credenciais; ver comentário "Credential safety" em `build-publish.yml` |
 | [Problema específico deste serviço] | [Causa] | [Solução] |
 
 ---
@@ -246,3 +247,4 @@ Após qualquer mudança relevante:
 - [ ] Nenhum alerta novo em Security → Secret scanning alerts
 - [ ] Nenhum alerta crítico/alto em Security → Dependabot alerts sem plano de ação
 - [ ] Imagem publicada sem CVEs críticos/altos (verificar resultado do Trivy no workflow)
+- [ ] Workflows não fazem echo/log de secrets (token só em docker/login-action; ver README § 2.5)
