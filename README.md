@@ -27,6 +27,8 @@ Template production-ready com **Clean Architecture + DDD**: APIs Python (Flask),
 | Segurança contínua | Dependabot (pip + Actions), Secret Scanning |
 | Branch policy | PR obrigatória, Code Owner review, push direto bloqueado |
 
+<!-- CI test: trigger pipeline -->
+
 ---
 
 ## Estrutura do repositório
