@@ -66,6 +66,9 @@ build_to_learn_template/
 ├── jest.config.js
 ├── Dockerfile.template               # CI-generated Dockerfile source
 ├── docker-compose.template.yml       # Optional local compose (placeholders)
+├── local-server/                     # Optional local proxy layout (see LOCAL_SERVER.md)
+│   ├── apps/                         # Currently empty
+│   └── nginx/                        # Currently empty
 ├── CLAUDE.md
 ├── README.md
 └── .pre-commit-config.yaml
@@ -180,6 +183,12 @@ build_to_learn_template/
 - Purpose: GSD codebase-mapper outputs (architecture, stack, testing, concerns).
 - Generated: No — maintained by mapping workflow.
 - Committed: Yes (typical for GSD projects).
+
+**`local-server/`:**
+
+- Purpose: Intended (by naming) for local nginx + apps layout; **not wired** to CI or root `Dockerfile.template`.
+- Contains: Empty `apps/` and `nginx/` as of last map; see `.planning/codebase/LOCAL_SERVER.md`.
+- Git: Empty dirs are not tracked until files exist.
 
 **`backend/app/` (import name `app`):**
 

@@ -4,6 +4,13 @@
 
 ## Tech Debt
 
+**`local-server/` scaffold without integration:**
+
+- Issue: Root `local-server/` has only empty `apps/` and `nginx/` subdirectories. No nginx config, compose, or docs link it to the Flask app or CI. Contributors may assume a local stack that does not exist in-repo.
+- Files: `local-server/apps/` (empty), `local-server/nginx/` (empty); contrast with `Dockerfile.template`, `docker-compose.template.yml`, `README.md` (no mention).
+- Impact: Confusion for onboarding; possible drift if someone adds local-only files without documenting them.
+- Fix approach: Either remove the tree, populate it with a minimal documented example + root README pointer, or add `local-server/` to ignore policy with a short comment in `README.md` if it must stay machine-local only.
+
 **`DATABASE_URL` configured but not wired:**
 
 - Issue: `get_config()` in `backend/app/config.py` exposes `DATABASE_URL`, and `backend/migrations/README.md` describes PostgreSQL/Alembic paths, but `create_app()` in `backend/app/__init__.py` always opens SQLite via `SQLITE_PATH` (or `:memory:` when testing). Production adopters may assume Postgres works by setting env only.
