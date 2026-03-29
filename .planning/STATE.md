@@ -1,3 +1,12 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+stopped_at: GSD new-project completed
+last_updated: "2026-03-29T14:35:11.843Z"
+---
+
 # State
 
 **Last updated:** 2026-03-29
@@ -12,9 +21,9 @@ See: `.planning/PROJECT.md` (updated 2026-03-29)
 
 ## Session
 
-**Stopped at:** GSD `new-project` completed — planning artifacts created
+**Stopped at:** GSD new-project completed
 
-**Resume file:** `.planning/ROADMAP.md`
+**Resume file:** .planning/ROADMAP.md
 
 ## Notes
 
