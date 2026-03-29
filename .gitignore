@@ -13,6 +13,9 @@ build/
 # Env (never commit secrets)
 .env
 
+# GSD planning (local only)
+.planning/
+
 # Node (if present)
 node_modules/
 

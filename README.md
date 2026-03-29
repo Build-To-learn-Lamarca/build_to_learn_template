@@ -128,11 +128,101 @@ No repositório (ou na organização): **Settings** → **Secrets and variables*
 
 | Tipo     | Nome                | Valor                          |
 |----------|---------------------|--------------------------------|
-| **Secret**   | `DOCKERHUB_TOKEN`   | Token gerado no passo 2.2      |
+| **Secret**   | `DOCKERHUB_TOKEN`   | Token gerado no passo 2.2 (build **e** deploy: `docker login` no runner) |
 | **Variable** | `DOCKERHUB_USERNAME`| Usuário ou organização no Docker Hub |
 
 - Em **Organization** → Settings → Secrets and variables → Actions: configurar aqui faz os repos herdarem (recomendado para vários projetos).
 - Em **Repository** → Settings → Secrets and variables → Actions: configurar só neste repo.
+
+#### 2.3.1 Runner self-hosted na VM (deploy)
+
+O job **deploy** usa `runs-on: [self-hosted, deploy]` — não há SSH a partir do GitHub; o agente do Actions corre **na própria VM** onde a aplicação vai ser executada.
+
+1. **Na VM (ex.: OCI, Ubuntu):** instalar [Docker Engine](https://docs.docker.com/engine/install/ubuntu/). O utilizador que executa o runner deve conseguir correr `docker` sem `sudo` após `sudo usermod -aG docker ubuntu` (ou `sudo usermod -aG docker "$USER"`) — **termina sessão e volta a entrar** (ou reinicia o serviço `actions.runner.*`) para o grupo `docker` aplicar; caso contrário o job `deploy` falha em `docker pull`.
+2. **Registar o runner no GitHub:** repositório → **Settings** → **Actions** → **Runners** → **New self-hosted runner** → escolher **Linux** e seguir os comandos (download, `config.sh` com URL e token).
+3. **Label obrigatório:** durante `./config.sh`, quando pedir labels, incluir **`deploy`** em lista separada por vírgulas (junto com `self-hosted`, conforme o assistente do GitHub mostrar). Exemplo conceitual: `self-hosted, deploy`. Sem o label `deploy`, o job de deploy não é atribuído a este runner.
+4. **Serviço:** após testar com `./run.sh`, instalar como serviço a partir da pasta do runner: `sudo ./svc.sh install` e `sudo ./svc.sh start`.
+5. **Firewall / OCI:** a VM precisa de **saída HTTPS** para `github.com` e para o Docker Hub; não é necessário abrir SSH ao GitHub (o runner inicia ligações de saída).
+
+Se tiveres vários runners na org, o label `deploy` garante que só a máquina certa recebe o job de deploy.
+
+#### 2.3.2 Nginx e TLS (HTTPS autoassinado no IP público)
+
+O job `deploy` em `.github/workflows/build-publish.yml` sobe o contentor e faz smoke em **`http://127.0.0.1:5000/health`**. Para expor a API na Internet com **HTTPS** no **IPv4 público** (sem FQDN), usa **Nginx** na VM como reverse proxy para `http://127.0.0.1:5000` e um certificado **autoassinado** com **Subject Alternative Name** no IP.
+
+1. **Instalar Nginx e OpenSSL (Ubuntu 22.04):**
+
+   ```bash
+   sudo apt-get update && sudo apt-get install -y nginx openssl
+   ```
+
+2. **Diretório de certificados (exemplo):**
+
+   ```bash
+   sudo mkdir -p /etc/nginx/ssl
+   ```
+
+   Coloca aqui `server.key` e `server.crt` (ou ajusta os caminhos no `server` block abaixo).
+
+3. **Gerar certificado autoassinado com SAN no IP** — substitui **`PUBLIC_IP`** pelo IPv4 público da VM (mantém o texto como placeholder na documentação; na VM usa o valor real):
+
+   ```bash
+   sudo openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
+     -keyout /etc/nginx/ssl/server.key \
+     -out /etc/nginx/ssl/server.crt \
+     -subj "/CN=PUBLIC_IP" \
+     -addext "subjectAltName=IP:PUBLIC_IP"
+   ```
+
+4. **Bloco `server` (esboço)** — `server_name` com o **mesmo** IP público; proxy para a app no host:
+
+   ```nginx
+   server {
+       listen 443 ssl;
+       ssl_certificate     /etc/nginx/ssl/server.crt;
+       ssl_certificate_key /etc/nginx/ssl/server.key;
+       server_name PUBLIC_IP;
+
+       location / {
+           proxy_pass http://127.0.0.1:5000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+   - **HTTP (porta 80):** podes redirecionar tudo para HTTPS, por exemplo `return 301 https://$host$request_uri;` num `server { listen 80; ... }`. O browser vai avisar no certificado autoassinado até haver domínio e CA confiável (ex.: Let’s Encrypt).
+
+5. **Recarregar Nginx:** `sudo nginx -t && sudo systemctl reload nginx`
+
+#### 2.3.3 Firewall OCI / NSG e portas
+
+**Ingresso TCP na VM:** **22** (SSH), **80** (HTTP, se usares redirect ou health), **443** (HTTPS). Configura **security lists** / **NSG** na OCI em conformidade; não abras portas extra sem necessidade.
+
+**Saída:** HTTPS para `github.com` (runner) e para o Docker Hub (`docker pull`), conforme já necessário para o deploy.
+
+#### 2.3.4 Smoke tests (HTTPS público)
+
+- A partir da Internet (aceita certificado não confiável com **`-k`** / `--insecure`):
+
+  ```bash
+  curl -fsS -k "https://PUBLIC_IP/health"
+  ```
+
+- Modo verboso para depuração TLS:
+
+  ```bash
+  curl -vk "https://PUBLIC_IP/health"
+  ```
+
+- Na própria VM, forçando o nome/IP a resolver para loopback (útil para testar SNI/cert sem sair da máquina):
+
+  ```bash
+  curl -fsS -k "https://127.0.0.1/health" --resolve "PUBLIC_IP:443:127.0.0.1"
+  ```
+
+O **`-k`** é **esperado** enquanto o certificado não for emitido por uma CA confiável. O workflow de CI já valida o contentor em **HTTP** em `127.0.0.1:5000`; a verificação **pública** é via **Nginx na porta 443**. Detalhes do job: `.github/workflows/build-publish.yml`.
 
 #### 2.4 Uso local (Docker CLI / Docker Desktop)
 
@@ -156,6 +246,7 @@ Para evitar vazamento de credenciais:
 
 - **Token:** use apenas **Secret** (`DOCKERHUB_TOKEN`). O workflow usa somente o passo **Login to Docker Hub** (action `docker/login-action`), que não faz echo nem log do valor — o GitHub mascara automaticamente secrets que apareçam em logs.
 - **Username:** use **Variable** (`DOCKERHUB_USERNAME`); não é sensível e pode aparecer em env e no Summary do job.
+- **Deploy (runner self-hosted):** o token do Docker Hub é usado só no passo **Login to Docker Hub** (`docker/login-action`) no job que corre no runner; não uses `echo` de secrets em scripts.
 - **Nunca:** fazer `echo`, `print` ou passar secrets para scripts nos workflows. Nenhum artefato enviado pelo CI deve conter `.env` ou tokens (o job **Check no .env committed** em PRs bloqueia commit de `.env`/`*.env`).
 
 ### 3. Configurar CODEOWNERS
@@ -371,8 +462,28 @@ Merge em main (produção)
 build-publish
     ├── Build Docker image
     ├── Trivy scan (bloqueia se CRITICAL/HIGH)
-    └── Push → Docker Hub (latest + sha-<commit>)
+    ├── Push → Docker Hub (latest + sha-<commit>)
+    └── deploy → runner **self-hosted** na VM (label `deploy`), `docker pull`, reinício do contentor, smoke `curl` em `/health`
+
+**`paths-ignore` no `push` para `main`:** alterações que tocam **apenas** `*.md` ou `docs/**` **não** disparam o workflow — não há build, push nem deploy. Para publicar imagem e deploy, o merge precisa incluir pelo menos um ficheiro fora desses caminhos.
+
+---
+
+### Produção na VM (variáveis de ambiente)
+
+A imagem publicada pelo CI **não** inclui `SECRET_KEY` nem outros segredos. Na VM, passa variáveis em tempo de execução, por exemplo:
+
+```bash
+docker run -d --name "<app>" ... --env-file /path/to/app.env ...
 ```
+
+O ficheiro `app.env` deve existir **só na VM**, permissões restritas (ex.: `chmod 600`), e **nunca** ser commitado.
+
+**Mínimo recomendado em produção:** `SECRET_KEY` (obrigatório), `DEBUG=false`, opcionalmente `LOG_LEVEL` — os nomes alinham com `.env.example` na raiz do repositório.
+
+**Follow-up (opcional, hardening):** o job `deploy` em `.github/workflows/build-publish.yml` usa hoje `-p 5000:5000`, o que publica a porta em todas as interfaces. Depois de validares Nginx em **443** como única entrada pública (D-04), podes alterar para `-p 127.0.0.1:5000:5000` no workflow para o contentor só escutar em loopback — **não** é obrigatório nesta fase; trata-se de melhoria de defesa em profundidade documentada para um PR futuro.
+
+**Nota:** o deploy assume Docker na VM e porta **5000** no contentor; o nome do contentor segue o repositório. Não coloques segredos no YAML do GitHub Actions.
 
 ---
 

@@ -1,12 +1,14 @@
 name: Build, Scan & Publish
 
 # Triggered only after a PR is merged into main.
-# Flow: construct Dockerfile → build image → Trivy vulnerability scan → push to Docker Hub.
+# Flow: construct Dockerfile → build image → Trivy vulnerability scan → push to Docker Hub → deploy (SSH).
 # The push is BLOCKED if Trivy finds CRITICAL or HIGH vulnerabilities.
 #
 # --- Credential safety (do not remove) ---
 # - DOCKERHUB_TOKEN: used ONLY in "Login to Docker Hub" via docker/login-action (never echo/log).
 # - DOCKERHUB_USERNAME: variable (non-secret), safe in env and Summary.
+# - Deploy runs on a self-hosted runner on the target VM (label `deploy`). No SSH from GitHub to the server.
+# - DOCKERHUB_TOKEN in deploy: only for docker/login-action if you need authenticated pull (private image or Hub rate limits).
 # - No step must echo, print, or pass secrets to scripts. GitHub masks secrets in logs when present.
 on:
   push:
@@ -169,3 +171,30 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- Registry: https://hub.docker.com/r/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
           echo "- Tags: \`latest\`, \`sha-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    name: Deploy on self-hosted runner (VM)
+    runs-on: [self-hosted, deploy]
+    needs: build-scan-push
+    env:
+      IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+      SHA: ${{ github.sha }}
+      APP_NAME: ${{ github.event.repository.name }}
+    steps:
+      # Login evita rate limit anónimo do Docker Hub e permite imagens privadas.
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Pull image and restart container
+        run: |
+          set -eu
+          docker pull "${IMAGE_NAME}:sha-${SHA}"
+          docker stop "${APP_NAME}" 2>/dev/null || true
+          docker rm "${APP_NAME}" 2>/dev/null || true
+          docker run -d --name "${APP_NAME}" --restart unless-stopped -p 5000:5000 \
+            "${IMAGE_NAME}:sha-${SHA}"
+          sleep 3
+          curl -fsS http://127.0.0.1:5000/health
