@@ -469,7 +469,21 @@ build-publish
 
 ---
 
-**Nota:** o deploy assume Docker na VM e porta **5000** exposta; o contentor usa o nome do repositório. Ajuste variáveis de runtime (ex.: `SECRET_KEY`) na VM conforme `.env.example` — não as coloque no YAML.
+### Produção na VM (variáveis de ambiente)
+
+A imagem publicada pelo CI **não** inclui `SECRET_KEY` nem outros segredos. Na VM, passa variáveis em tempo de execução, por exemplo:
+
+```bash
+docker run -d --name "<app>" ... --env-file /path/to/app.env ...
+```
+
+O ficheiro `app.env` deve existir **só na VM**, permissões restritas (ex.: `chmod 600`), e **nunca** ser commitado.
+
+**Mínimo recomendado em produção:** `SECRET_KEY` (obrigatório), `DEBUG=false`, opcionalmente `LOG_LEVEL` — os nomes alinham com `.env.example` na raiz do repositório.
+
+**Follow-up (opcional, hardening):** o job `deploy` em `.github/workflows/build-publish.yml` usa hoje `-p 5000:5000`, o que publica a porta em todas as interfaces. Depois de validares Nginx em **443** como única entrada pública (D-04), podes alterar para `-p 127.0.0.1:5000:5000` no workflow para o contentor só escutar em loopback — **não** é obrigatório nesta fase; trata-se de melhoria de defesa em profundidade documentada para um PR futuro.
+
+**Nota:** o deploy assume Docker na VM e porta **5000** no contentor; o nome do contentor segue o repositório. Não coloques segredos no YAML do GitHub Actions.
 
 ---
 
