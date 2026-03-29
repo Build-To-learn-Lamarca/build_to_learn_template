@@ -130,6 +130,9 @@ No repositório (ou na organização): **Settings** → **Secrets and variables*
 |----------|---------------------|--------------------------------|
 | **Secret**   | `DOCKERHUB_TOKEN`   | Token gerado no passo 2.2      |
 | **Variable** | `DOCKERHUB_USERNAME`| Usuário ou organização no Docker Hub |
+| **Secret**   | `SSH_HOST`          | IP público ou DNS da VM de deploy (ex.: Oracle Cloud Compute; não commite no repositório) |
+| **Secret**   | `SSH_PRIVATE_KEY`   | Chave privada PEM (usuário `ubuntu` na VM). **Nunca** commitar |
+| **Secret**   | `SSH_PASSPHRASE`    | Opcional — só se a chave SSH tiver passphrase |
 
 - Em **Organization** → Settings → Secrets and variables → Actions: configurar aqui faz os repos herdarem (recomendado para vários projetos).
 - Em **Repository** → Settings → Secrets and variables → Actions: configurar só neste repo.
@@ -156,6 +159,7 @@ Para evitar vazamento de credenciais:
 
 - **Token:** use apenas **Secret** (`DOCKERHUB_TOKEN`). O workflow usa somente o passo **Login to Docker Hub** (action `docker/login-action`), que não faz echo nem log do valor — o GitHub mascara automaticamente secrets que apareçam em logs.
 - **Username:** use **Variable** (`DOCKERHUB_USERNAME`); não é sensível e pode aparecer em env e no Summary do job.
+- **Deploy (SSH):** `SSH_HOST`, `SSH_PRIVATE_KEY` e opcionalmente `SSH_PASSPHRASE` são usados apenas no job **Deploy to OCI VM via SSH** (`appleboy/ssh-action`), não em passos `run:` com `echo`.
 - **Nunca:** fazer `echo`, `print` ou passar secrets para scripts nos workflows. Nenhum artefato enviado pelo CI deve conter `.env` ou tokens (o job **Check no .env committed** em PRs bloqueia commit de `.env`/`*.env`).
 
 ### 3. Configurar CODEOWNERS
@@ -371,8 +375,14 @@ Merge em main (produção)
 build-publish
     ├── Build Docker image
     ├── Trivy scan (bloqueia se CRITICAL/HIGH)
-    └── Push → Docker Hub (latest + sha-<commit>)
-```
+    ├── Push → Docker Hub (latest + sha-<commit>)
+    └── deploy → SSH na VM (Ubuntu/`ubuntu`), `docker pull` da imagem `sha-<commit>`, reinício do contentor, smoke `curl` em `/health`
+
+**`paths-ignore` no `push` para `main`:** alterações que tocam **apenas** `*.md` ou `docs/**` **não** disparam o workflow — não há build, push nem deploy. Para publicar imagem e deploy, o merge precisa incluir pelo menos um ficheiro fora desses caminhos.
+
+---
+
+**Nota:** o deploy assume Docker na VM e porta **5000** exposta; o contentor usa o nome do repositório. Ajuste variáveis de runtime (ex.: `SECRET_KEY`) na VM conforme `.env.example` — não as coloque no YAML.
 
 ---
 

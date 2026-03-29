@@ -1,12 +1,13 @@
 name: Build, Scan & Publish
 
 # Triggered only after a PR is merged into main.
-# Flow: construct Dockerfile → build image → Trivy vulnerability scan → push to Docker Hub.
+# Flow: construct Dockerfile → build image → Trivy vulnerability scan → push to Docker Hub → deploy (SSH).
 # The push is BLOCKED if Trivy finds CRITICAL or HIGH vulnerabilities.
 #
 # --- Credential safety (do not remove) ---
 # - DOCKERHUB_TOKEN: used ONLY in "Login to Docker Hub" via docker/login-action (never echo/log).
 # - DOCKERHUB_USERNAME: variable (non-secret), safe in env and Summary.
+# - SSH_HOST / SSH_PRIVATE_KEY / SSH_PASSPHRASE: used ONLY in "Deploy to OCI VM via SSH" via appleboy/ssh-action (never echo/log).
 # - No step must echo, print, or pass secrets to scripts. GitHub masks secrets in logs when present.
 on:
   push:
@@ -169,3 +170,30 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- Registry: https://hub.docker.com/r/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
           echo "- Tags: \`latest\`, \`sha-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    name: Deploy to OCI VM via SSH
+    runs-on: ubuntu-latest
+    needs: build-scan-push
+    env:
+      IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+      SHA: ${{ github.sha }}
+      APP_NAME: ${{ github.event.repository.name }}
+    steps:
+      - name: Pull image and restart container on VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: IMAGE_NAME,SHA,APP_NAME
+          script: |
+            set -eu
+            docker pull "${IMAGE_NAME}:sha-${SHA}"
+            docker stop "${APP_NAME}" 2>/dev/null || true
+            docker rm "${APP_NAME}" 2>/dev/null || true
+            docker run -d --name "${APP_NAME}" --restart unless-stopped -p 5000:5000 \
+              "${IMAGE_NAME}:sha-${SHA}"
+            sleep 3
+            curl -fsS http://127.0.0.1:5000/health
