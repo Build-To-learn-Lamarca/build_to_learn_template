@@ -61,9 +61,9 @@ Plans:
 
 Plans:
 
-- [ ] `02-01-PLAN.md` — ROADMAP Phase 2 aligned to VM baseline + D-09
-- [ ] `02-02-PLAN.md` — README: runner, Docker, Nginx, OpenSSL IP SAN, OCI ports, HTTPS smoke
-- [ ] `02-03-PLAN.md` — Production env docs (SECRET_KEY / .env.example) + optional localhost bind follow-up
+- [x] `02-01-PLAN.md` — ROADMAP Phase 2 aligned to VM baseline + D-09
+- [x] `02-02-PLAN.md` — README: runner, Docker, Nginx, OpenSSL IP SAN, OCI ports, HTTPS smoke
+- [x] `02-03-PLAN.md` — Production env docs (SECRET_KEY / .env.example) + optional localhost bind follow-up
 
 **Deferred / backlog (esta fase):**
 
